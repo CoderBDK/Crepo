@@ -42,16 +42,24 @@ class SuperCrepoProcessor(
         val imports = mutableSetOf(
             "kotlinx.coroutines.flow.Flow",
             "kotlinx.coroutines.flow.flow",
-            "${ksClass.packageName.asString()}." + kClassName,
+            "${ksClass.packageName.asString()}.$kClassName",
             "com.lazy.crepo.state.DataState"
         )
 
         val repo = GenerateRepository(repoClassName, packageName ?: ksClass.packageName.asString())
-        repo.addParams(
-            listOf(
-                "api" to kClassName
-            )
-        )
+
+        repo.addParams(listOf("api" to kClassName))
+
+        val annotation = ksClass.annotations.firstOrNull {
+            it.shortName.asString() == "RepoInject"
+        }
+
+        val useHilt = annotation != null
+
+        if (useHilt) {
+            imports.add("javax.inject.Inject")
+            repo.addHiltInject(true)
+        }
 
         ksClass.getAllFunctions()
             .filter { function ->
@@ -63,7 +71,7 @@ class SuperCrepoProcessor(
                 val returnType =
                     function.returnType?.resolve()?.declaration?.qualifiedName?.asString() ?: "Unit"
 
-                if (!returnType.startsWith("kotlin.")) {
+                if (!returnType.startsWith("kotlin.") && returnType.contains(".")) {
                     imports.add(returnType)
                 }
 
@@ -72,7 +80,7 @@ class SuperCrepoProcessor(
                     val paramType =
                         param.type.resolve().declaration.qualifiedName?.asString() ?: "Any"
 
-                    if (!paramType.startsWith("kotlin.")) {
+                    if (!paramType.startsWith("kotlin.") && paramType.contains(".")) {
                         imports.add(paramType)
                     }
 
@@ -89,15 +97,18 @@ class SuperCrepoProcessor(
 
         repo.addImports(imports.toList())
 
+        try {
+            val file = generator.createNewFile(
+                Dependencies(false, ksClass.containingFile!!),
+                packageName ?: ksClass.packageName.asString(),
+                repoClassName
+            )
 
-        val file = generator.createNewFile(
-            Dependencies(false, ksClass.containingFile!!),
-            packageName ?: ksClass.packageName.asString(),
-            repoClassName
-        )
-
-        OutputStreamWriter(file).use { writer ->
-            writer.write(repo.build())
+            OutputStreamWriter(file).use { writer ->
+                writer.write(repo.build())
+            }
+        } catch (e: Exception) {
+            logger.error("Error generating repository for class $kClassName: ${e.message}")
         }
     }
 }

@@ -17,6 +17,5 @@ kotlin {
 
 dependencies {
     api(project(":crepo"))
-    implementation(libs.kotlinpoet)
     implementation(libs.symbol.processing.api)
 }
